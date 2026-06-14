@@ -21,19 +21,48 @@ if ($conexion->connect_error) {
 
 $mensaje = "";
 
-// Procesar la actualización de precios
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['precios'])) {
-    $precios = $_POST['precios']; // Array con los nuevos precios [id => nuevo_precio]
-    
+// 1. PROCESAR: AGREGAR NUEVO PRODUCTO
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['accion_agregar'])) {
+    $nombre_nuevo = $conexion->real_escape_string($_POST['nuevo_nombre']);
+    $categoria_nueva = $conexion->real_escape_string($_POST['nuevo_categoria']);
+    $precio_nuevo = floatval($_POST['nuevo_precio']);
+
+    if (!empty($nombre_nuevo) && !empty($categoria_nueva) && $precio_nuevo > 0) {
+        $sql_insert = "INSERT INTO productos (nombre, categoria, precio) VALUES ('$nombre_nuevo', '$categoria_nueva', $precio_nuevo)";
+        if ($conexion->query($sql_insert)) {
+            $mensaje = "¡Producto agregado con éxito al menú!";
+        } else {
+            $mensaje = "Error al agregar el producto: " . $conexion->error;
+        }
+    } else {
+        $mensaje = "Por favor, rellene todos los campos correctamente.";
+    }
+}
+
+// 2. PROCESAR: ELIMINAR PRODUCTO
+if (isset($_GET['eliminar'])) {
+    $id_eliminar = intval($_GET['eliminar']);
+    $sql_delete = "DELETE FROM productos WHERE id = $id_eliminar";
+    if ($conexion->query($sql_delete)) {
+        $mensaje = "¡Producto eliminado correctamente del menú!";
+    } else {
+        $mensaje = "Error al eliminar el producto.";
+    }
+}
+
+// 3. PROCESAR: MODIFICAR/EDITAR PRODUCTOS EXISTENTES
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['productos_edit'])) {
+    $productos_edit = $_POST['productos_edit']; 
     $cambios_realizados = 0;
 
-    foreach ($precios as $id_prod => $precio_nuevo) {
-        // Limpiar el valor para que sea un número decimal válido
-        $precio_nuevo = floatval($precio_nuevo);
+    foreach ($productos_edit as $id_prod => $datos) {
+        $id_prod = intval($id_prod);
+        $nombre_mod = $conexion->real_escape_string($datos['nombre']);
+        $categoria_mod = $conexion->real_escape_string($datos['categoria']);
+        $precio_mod = floatval($datos['precio']);
         
-        if ($precio_nuevo > 0) {
-            // Actualizar el precio en la tabla 'productos'
-            $sql_update = "UPDATE productos SET precio = $precio_nuevo WHERE id = " . intval($id_prod);
+        if (!empty($nombre_mod) && !empty($categoria_mod) && $precio_mod > 0) {
+            $sql_update = "UPDATE productos SET nombre = '$nombre_mod', categoria = '$categoria_mod', precio = $precio_mod WHERE id = $id_prod";
             if ($conexion->query($sql_update)) {
                 $cambios_realizados++;
             }
@@ -41,7 +70,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['precios'])) {
     }
 
     if ($cambios_realizados > 0) {
-        $mensaje = "¡Precios actualizados con éxito en el menú!";
+        $mensaje = "¡Menú y precios actualizados con éxito!";
     }
 }
 
@@ -55,7 +84,7 @@ $resultado = $conexion->query($sql_productos);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modificar Precios - Taquería Novillero</title>
+    <title>Gestionar Menú - Taquería Novillero</title>
     <style>
         body {
             background-color: #f4ece1; /* Fondo color hueso/arena */
@@ -70,7 +99,7 @@ $resultado = $conexion->query($sql_productos);
 
         .container {
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             background-color: #ffffff;
             padding: 25px;
             border-radius: 20px; /* Esquinas redondeadas rústicas */
@@ -97,7 +126,7 @@ $resultado = $conexion->query($sql_productos);
             font-weight: bold;
         }
 
-        /* Alerta de Éxito */
+        /* Alerta de Éxito / Estado */
         .mensaje-alerta {
             background-color: #edf7ed;
             color: #1e4620;
@@ -107,6 +136,36 @@ $resultado = $conexion->query($sql_productos);
             margin-bottom: 25px;
             border-left: 6px solid #4caf50;
             font-size: 14px;
+        }
+
+        /* Formulario Agregar Producto */
+        .form-agregar {
+            background-color: #fcf8f2;
+            border: 1px dashed #3d2514;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .form-agregar h3 {
+            margin: 0;
+            width: 100%;
+            font-size: 14px;
+            text-transform: uppercase;
+            color: #3d2514;
+        }
+
+        .input-inline {
+            font-family: inherit;
+            padding: 6px;
+            border: 1px solid #3d2514;
+            border-radius: 8px;
+            color: #2c1d11;
+            font-size: 13px;
         }
 
         /* Tabla Estilizada */
@@ -142,34 +201,52 @@ $resultado = $conexion->query($sql_productos);
             border-bottom: none;
         }
 
-        .cat-tag {
-            font-weight: bold;
-            font-size: 10px;
-            padding: 2px 6px;
-            background-color: #f4ece1;
-            border: 1px solid #3d2514;
-            border-radius: 4px;
-            color: #5c4033;
-        }
-
-        /* Input de precio */
-        .input-precio {
+        /* Inputs editables dentro de la tabla */
+        .input-tabla {
             font-family: inherit;
-            padding: 6px;
+            padding: 5px;
             border: 1px solid #3d2514;
-            border-radius: 8px; /* Redondeado */
-            text-align: right;
-            font-weight: bold;
+            border-radius: 6px;
             color: #2c1d11;
+            font-weight: bold;
             background-color: #fcf8f2;
-            width: 90px;
+            font-size: 13px;
             box-sizing: border-box;
-            font-size: 14px;
+            width: 100%;
         }
 
-        .input-precio:focus {
+        .input-precio {
+            text-align: right;
+            width: 80px;
+        }
+
+        .input-tabla:focus {
             background-color: #ffffff;
             outline: 2px solid #d32f2f;
+        }
+
+        /* Botón Eliminar */
+        .btn-eliminar {
+            background-color: #b71c1c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            text-decoration: none;
+            font-size: 12px;
+            box-shadow: 0 2px 0 #7f1212;
+        }
+
+        .btn-eliminar:hover {
+            background-color: #d32f2f;
+        }
+
+        .btn-eliminar:active {
+            box-shadow: none;
+            transform: translateY(2px);
         }
 
         .acciones-box {
@@ -233,8 +310,8 @@ $resultado = $conexion->query($sql_productos);
 <body>
 
     <div class="container">
-        <h2>Panel de Administración: Modificar Precios</h2>
-        <p class="sub-titulo">AJUSTE DE TARIFAS Y COSTOS DEL MENÚ GENERAL</p>
+        <h2>Panel de Administración: Gestionar Menú</h2>
+        <p class="sub-titulo">ALTA, BAJA Y MODIFICACIÓN DE PLATILLOS E INSUMOS</p>
 
         <!-- Mensajes de respuesta -->
         <?php if (!empty($mensaje)): ?>
@@ -243,37 +320,74 @@ $resultado = $conexion->query($sql_productos);
             </div>
         <?php endif; ?>
 
+        <!-- SECCIÓN 1: FORMULARIO NUEVO PARA AGREGAR PRODUCTO -->
+        <form action="cambiar_precios.php" method="POST" class="form-agregar">
+            <h3>+ AGREGAR NUEVO PRODUCTO AL MENÚ</h3>
+            <input type="text" name="nuevo_nombre" placeholder="Nombre del platillo/bebida" class="input-inline" style="flex: 2;" required>
+            
+            <select name="nuevo_categoria" class="input-inline" style="flex: 1;" required>
+                <option value="" disabled selected>Categoría...</option>
+                <option value="tacos">TACOS</option>
+                <option value="especialidades">ESPECIALIDADES</option>
+                <option value="bebidas">BEBIDAS</option>
+                <option value="postres">POSTRES</option>
+            </select>
+
+            <input type="number" name="nuevo_precio" placeholder="Precio ($)" step="0.01" min="0.01" class="input-inline" style="width: 100px;" required>
+            
+            <button type="submit" name="accion_agregar" class="btn-guardar" style="padding: 6px 15px; box-shadow: 0 2px 0 #991b1b; font-size: 11px;">Añadir</button>
+        </form>
+
+        <!-- SECCIÓN 2 y 3: TABLA PARA EDITAR Y ELIMINAR -->
         <form action="cambiar_precios.php" method="POST">
             <table>
                 <thead>
                     <tr>
-                        <th style="text-align: center; width: 140px;">Categoría</th>
+                        <th style="text-align: center; width: 150px;">Categoría</th>
                         <th style="text-align: left;">Nombre del Producto</th>
-                        <th style="text-align: right; width: 150px;">Precio Actual</th>
-                        <th style="text-align: center; width: 160px;">Nuevo Precio ($)</th>
+                        <th style="text-align: center; width: 130px;">Precio ($)</th>
+                        <th style="text-align: center; width: 100px;">Acción</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if ($resultado && $resultado->num_rows > 0): ?>
                         <?php while ($row = $resultado->fetch_assoc()): ?>
                             <tr>
+                                <!-- Categoría Editable -->
                                 <td style="text-align: center;">
-                                    <span class="cat-tag"><?php echo strtoupper($row['categoria']); ?></span>
+                                    <input type="text" 
+                                           name="productos_edit[<?php echo $row['id']; ?>][categoria]" 
+                                           value="<?php echo htmlspecialchars($row['categoria']); ?>" 
+                                           class="input-tabla" 
+                                           style="text-align: center; text-transform: uppercase;" required>
                                 </td>
-                                <td><strong><?php echo htmlspecialchars($row['nombre']); ?></strong></td>
-                                <td style="text-align: right; font-weight: bold; color: #5c4033;">
-                                    $<?php echo number_format($row['precio'], 2); ?>
+                                
+                                <!-- Nombre Editable -->
+                                <td>
+                                    <input type="text" 
+                                           name="productos_edit[<?php echo $row['id']; ?>][nombre]" 
+                                           value="<?php echo htmlspecialchars($row['nombre']); ?>" 
+                                           class="input-tabla" required>
                                 </td>
+                                
+                                <!-- Precio Editable -->
                                 <td style="text-align: center;">
-                                    <!-- Mandamos el precio actual como valor por defecto para que sea más fácil editar -->
-                                    <span style="color: #3d2514; font-weight: bold; margin-right: 4px;">$</span>
+                                    <span style="color: #3d2514; font-weight: bold; margin-right: 2px;">$</span>
                                     <input type="number" 
-                                           name="precios[<?php echo $row['id']; ?>]" 
+                                           name="productos_edit[<?php echo $row['id']; ?>][precio]" 
                                            step="0.01" 
                                            min="0.01" 
                                            value="<?php echo $row['precio']; ?>" 
-                                           class="input-precio" 
-                                           required>
+                                           class="input-tabla input-precio" required>
+                                </td>
+                                
+                                <!-- Botón de Eliminación Directa -->
+                                <td style="text-align: center;">
+                                    <a href="cambiar_precios.php?eliminar=<?php echo $row['id']; ?>" 
+                                       class="btn-eliminar" 
+                                       onclick="return confirm('¿Seguro que deseas eliminar este producto del menú?');">
+                                       Eliminar
+                                    </a>
                                 </td>
                             </tr>
                         <?php endwhile; ?>

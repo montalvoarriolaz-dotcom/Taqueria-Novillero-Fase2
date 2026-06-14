@@ -175,7 +175,7 @@ if (!isset($_SESSION['usuario'])) {
             <h3>Herramientas de Administrador (Exclusivo)</h3>
             <ul class="menu-links">
                 <li><a href="reporte_ventas.php">Reporte de Ventas Totales</a></li>
-                <li><a href="cambiar_precios.php">Modificar Precios Menú</a></li>
+                <li><a href="cambiar_precios.php">Modificar Menú</a></li>
                 <li><a href="gestionar_usuarios.php">Gestionar Usuarios</a></li>
                 <li><a href="gestionar_inventario.php">Gestionar Inventario</a></li>
             </ul>
