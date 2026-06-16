@@ -167,6 +167,7 @@ if (!isset($_SESSION['usuario'])) {
                 <li><a href="hacer_pedidoA.php">Tomar nueva orden</a></li>
                 <li><a href="historial_pedidosA.php">Pedidos Activos</a></li>
                 <li><a href="historial_ventasA.php">Ver Historial de Ventas</a></li>
+		<li><a href="cocinaA.php" class="btn">Cocina</a></li>
             </ul>
         </div>
 

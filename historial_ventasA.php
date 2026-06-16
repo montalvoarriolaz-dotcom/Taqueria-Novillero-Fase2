@@ -1,409 +1,661 @@
 ﻿<?php
+
 session_start();
 
-// Validar seguridad de administrador
+
+
+// Validar que el usuario inició sesión
+
 if (!isset($_SESSION['usuario'])) {
+
     header("Location: login.php");
+
     exit();
+
 }
 
+
+
 $servidor   = "localhost";
+
 $usuario_db = "root";
+
 $pass_db    = "";
+
 $base_datos = "taqueria_novillero";
+
+
 
 $conexion = new mysqli($servidor, $usuario_db, $pass_db, $base_datos);
 
+
+
 if ($conexion->connect_error) {
+
     die("Error de conexión: " . $conexion->connect_error);
+
 }
 
-$mensaje = "";
 
-// ACCIÓN EXCLUSIVA DE ADMIN: BORRAR REGISTRO DEL HISTORIAL
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['borrar_venta'])) {
-    $id_venta_borrar = intval($_POST['id_venta_borrar']);
+
+$notificacion = "";
+
+
+
+// ACCIÓN: ELIMINAR UN REGISTRO PERMANENTEMENTE DEL HISTORIAL
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['eliminar_registro'])) {
+
+    $id_venta_borrar = intval($_POST['id_venta_id']);
+
     
-    // Eliminar el registro del historial de ventas
-    $sql_borrar = "DELETE FROM historial_ventas WHERE id_venta = $id_venta_borrar";
-    if ($conexion->query($sql_borrar)) {
-        $mensaje = "¡Registro de venta #$id_venta_borrar eliminado correctamente del historial!";
+
+    $sql_delete = "DELETE FROM historial_ventas WHERE id_venta = $id_venta_borrar";
+
+    if ($conexion->query($sql_delete)) {
+
+        $notificacion = "🗑️ El registro de venta #$id_venta_borrar ha sido eliminado físicamente del historial.";
+
     } else {
-        $mensaje = "Error al intentar eliminar el registro.";
+
+        $notificacion = "❌ Error al intentar borrar el registro del historial.";
+
     }
+
 }
 
-// Consulta para traer las ventas cobradas con el desglose de sus productos
-$sql = "SELECT h.id_venta, h.id_pedido, h.total, h.cobrado_por, h.fecha_hora_cobro,
-               GROUP_CONCAT(CONCAT(d.cantidad, 'x ', p.nombre) SEPARATOR '<br>') AS productos_desglosados,
-               GROUP_CONCAT(CONCAT(d.cantidad, '|||', p.nombre, '|||', p.precio) SEPARATOR '###') AS ticket_data
-        FROM historial_ventas h
-        INNER JOIN detalle_pedidos d ON h.id_pedido = d.id_pedido
-        INNER JOIN productos p ON d.id_producto = p.id
-        GROUP BY h.id_venta
-        ORDER BY h.fecha_hora_cobro DESC";
+
+
+// CONSULTA DIRECTA Y TOTAL A TU TABLA DE HISTORIAL
+
+$sql = "SELECT id_venta, id_pedido, total, cobrado_por, fecha_hora_cobro, estado, productos_vendidos 
+
+        FROM historial_ventas 
+
+        ORDER BY fecha_hora_cobro DESC";
 
 $resultado = $conexion->query($sql);
+
 ?>
 
+
+
 <!DOCTYPE html>
+
 <html lang="es">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historial de Ventas (Admin) - Taquería Novillero</title>
+
+    <title>Historial de Ventas - Taquería Novillero</title>
+
     <style>
-        body {
-            background-color: #f4ece1; /* Fondo color hueso/arena */
-            font-family: 'Courier New', Courier, monospace;
-            color: #2c1d11; /* Café muy oscuro */
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+
+        body { 
+
+            background-color: #f4ece1; 
+
+            font-family: 'Courier New', Courier, monospace; 
+
+            color: #2c1d11; 
+
+            padding: 20px; 
+
+            margin: 0; 
+
+            display: flex; 
+
+            flex-direction: column; 
+
+            align-items: center; 
+
         }
 
-        .container {
-            width: 100%;
-            max-width: 1000px;
-            background-color: #ffffff;
-            padding: 25px;
-            border-radius: 20px; /* Esquinas redondeadas */
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            border: 2px solid #d32f2f; /* Borde rojo quemado para entorno Admin */
+        .container { 
+
+            width: 100%; 
+
+            max-width: 1100px; 
+
+            background-color: #ffffff; 
+
+            padding: 25px; 
+
+            border-radius: 20px; 
+
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+
+            border: 2px solid #d32f2f; 
+
         }
 
-        h2 {
-            color: #3d2514;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            border-bottom: 3px double #d32f2f; /* Línea roja doble */
-            padding-bottom: 10px;
-            margin-top: 0;
-            margin-bottom: 5px;
+        h2 { 
+
+            color: #3d2514; 
+
+            text-transform: uppercase; 
+
+            text-align: center; 
+
+            border-bottom: 3px double #d32f2f; 
+
+            padding-bottom: 10px; 
+
+            margin: 0 0 5px 0; 
+
         }
 
         .sub-titulo {
+
+            text-align: center;
+
             margin-top: 5px;
+
             margin-bottom: 25px;
+
             font-size: 14px;
+
             font-style: italic;
+
             color: #b71c1c;
+
             font-weight: bold;
-        }
 
-        .mensaje-alerta {
-            background-color: #edf7ed;
-            color: #1e4620;
-            padding: 12px;
-            border-radius: 12px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            border-left: 6px solid #4caf50;
-            font-size: 14px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin-bottom: 20px;
-            border-radius: 15px; /* Tabla redondeada */
-            overflow: hidden;
-            border: 1px solid #3d2514;
-        }
-
-        th {
-            background-color: #d32f2f; /* Encabezado Rojo Administrativo */
-            color: #ffffff;
-            padding: 12px;
             text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 1px;
+
         }
 
-        td {
-            padding: 12px;
-            background-color: #ffffff;
-            border-bottom: 1px solid #f4ece1;
+        .alerta { 
+
+            background-color: #fdf2f2; 
+
+            color: #b71c1c; 
+
+            padding: 12px; 
+
+            border-radius: 12px; 
+
+            font-weight: bold; 
+
+            margin-bottom: 20px; 
+
+            border-left: 6px solid #d32f2f; 
+
+            text-align: center;
+
+        }
+
+        table { 
+
+            width: 100%; 
+
+            border-collapse: separate; 
+
+            border-spacing: 0; 
+
+            border: 1px solid #3d2514; 
+
+            border-radius: 15px; 
+
+            overflow: hidden; 
+
+        }
+
+        th { 
+
+            background-color: #d32f2f; 
+
+            color: #ffffff; 
+
+            padding: 12px; 
+
+            text-transform: uppercase; 
+
+            font-size: 11px; 
+
+            letter-spacing: 0.5px;
+
+        }
+
+        td { 
+
+            padding: 12px; 
+
+            background-color: #ffffff; 
+
+            border-bottom: 1px solid #f4ece1; 
+
+            font-size: 13px; 
+
+            vertical-align: middle; 
+
             color: #2c1d11;
-            font-size: 13px;
-            vertical-align: middle;
+
         }
 
-        tr:last-child td {
-            border-bottom: none;
+        tr:last-child td { border-bottom: none; }
+
+        
+
+        /* Modificación visual para renglones cancelados */
+
+        .cancelado-row td { 
+
+            background-color: #fdf2f2 !important; 
+
+            color: #7f2323; 
+
         }
 
-        .acciones-box {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            align-items: center;
-        }
+        
 
-        .btn-ticket {
-            display: block;
-            width: 90px;
-            padding: 6px 0;
-            background-color: #2c1d11; /* Negro carbón */
-            color: #ffffff;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 11px;
+        /* Badges de Estado */
+
+        .badge { 
+
+            padding: 5px 10px; 
+
+            border-radius: 6px; 
+
+            font-size: 11px; 
+
+            font-weight: bold; 
+
             text-transform: uppercase;
-            border-radius: 8px;
-            transition: background 0.2s;
-            text-align: center;
-            cursor: pointer;
+
+            display: inline-block;
+
         }
 
-        .btn-ticket:hover {
-            background-color: #3d2514;
-        }
+        .badge-cobrado { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
 
-        .btn-borrar {
-            display: block;
-            width: 90px;
-            padding: 6px 0;
-            background-color: #d32f2f; /* Rojo */
-            color: #ffffff;
-            border: none;
-            font-family: inherit;
-            font-weight: bold;
-            font-size: 11px;
-            text-transform: uppercase;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.2s;
-            text-align: center;
-        }
+        .badge-cancelado { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
 
-        .btn-borrar:hover {
-            background-color: #b71c1c;
-        }
+        
 
-        .btn-volver {
-            display: block;
-            width: 220px;
-            margin: 25px auto 0 auto;
-            padding: 12px;
-            background-color: #2c1d11;
-            color: #ffffff;
-            text-decoration: none;
-            text-align: center;
-            font-weight: bold;
-            text-transform: uppercase;
-            font-size: 13px;
-            border-radius: 12px;
-            transition: background 0.2s;
-            box-shadow: 0 4px 0 #1c1007;
-        }
+        /* Botones */
 
-        .btn-volver:hover {
-            background-color: #d32f2f;
-            box-shadow: 0 4px 0 #991b1b;
-        }
+        .acciones-wrapper { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 
-        .btn-volver:active {
-            box-shadow: none;
-            transform: translateY(4px);
-        }
+        .btn-ticket { width: 100px; padding: 7px 0; background-color: #2c1d11; color: #ffffff; font-weight: bold; font-size: 11px; text-transform: uppercase; border-radius: 8px; cursor: pointer; border: none; text-align: center; }
+
+        .btn-ticket:hover { background-color: #d32f2f; }
+
+        .btn-borrar { width: 100px; padding: 7px 0; background-color: #c62828; color: #ffffff; font-weight: bold; font-size: 11px; text-transform: uppercase; border-radius: 8px; cursor: pointer; border: none; text-align: center; }
+
+        .btn-borrar:hover { background-color: #b71c1c; }
+
+        
+
+        .btn-regresar { display: block; width: 240px; margin: 25px auto 0 auto; padding: 12px; background-color: #3d2514; color: #ffffff; text-decoration: none; text-align: center; font-weight: bold; border-radius: 12px; text-transform: uppercase; box-shadow: 0 4px 0 #1c1007; }
+
+        .btn-regresar:hover { background-color: #d32f2f; box-shadow: 0 4px 0 #991b1b; }
+
     </style>
+
 </head>
+
 <body>
 
-    <div class="container">
-        <h2>Historial de Ventas Cobradas</h2>
-        <p class="sub-titulo">MÓDULO DE EDICIÓN Y CONSULTA EXCLUSIVO ADMINISTRADOR</p>
 
-        <?php if (!empty($mensaje)): ?>
-            <div class="mensaje-alerta"><?php echo $mensaje; ?></div>
-        <?php endif; ?>
 
-        <table>
-            <thead>
+<div class="container">
+
+    <h2>Historial de Ventas</h2>
+
+    <p class="sub-titulo">Taquería Novillero — Registro de Auditoría</p>
+
+
+
+    <?php if (!empty($notificacion)): ?>
+
+        <div class="alerta"><?php echo $notificacion; ?></div>
+
+    <?php endif; ?>
+
+
+
+    <table>
+
+        <thead>
+
+            <tr>
+
+                <th style="width: 90px; text-align: center;">ID Venta</th>
+
+                <th style="width: 80px; text-align: center;">Pedido</th>
+
+                <th style="width: 170px; text-align: left;">Fecha y Hora</th>
+
+                <th style="width: 130px; text-align: left;">Quién Vendió</th>
+
+                <th style="text-align: left;">Qué Vendió (Productos)</th>
+
+                <th style="width: 110px; text-align: center;">Estado</th>
+
+                <th style="width: 100px; text-align: right;">Total</th>
+
+                <th style="width: 130px; text-align: center;">Acciones</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            <?php if ($resultado && $resultado->num_rows > 0): ?>
+
+                <?php while ($v = $resultado->fetch_assoc()): ?>
+
+                    <?php 
+
+                    $esCancelado = ($v['estado'] === 'CANCELADO'); 
+
+                    // Reemplazamos los saltos de línea (\n) por br para que se vean ordenados en la tabla
+
+                    $productosCelda = nl2br(htmlspecialchars($v['productos_vendidos']));
+
+                    ?>
+
+                    <tr class="<?php echo $esCancelado ? 'cancelado-row' : ''; ?>">
+
+                        <td style="text-align: center; font-weight: bold;">#<?php echo $v['id_venta']; ?></td>
+
+                        <td style="text-align: center;">#<?php echo $v['id_pedido']; ?></td>
+
+                        <td><?php echo $v['fecha_hora_cobro']; ?></td>
+
+                        <td><strong><?php echo htmlspecialchars($v['cobrado_por']); ?></strong></td>
+
+                        <td style="line-height: 1.5; font-size: 12px; font-weight: bold;"><?php echo $productosCelda; ?></td>
+
+                        <td style="text-align: center;">
+
+                            <span class="badge <?php echo $esCancelado ? 'badge-cancelado' : 'badge-cobrado'; ?>">
+
+                                <?php echo ($v['estado'] === 'COBRADO' || $v['estado'] === 'PAGADO') ? '✔ COBRADO' : '❌ CANCELADO'; ?>
+
+                            </span>
+
+                        </td>
+
+                        <td style="text-align: right; font-weight: bold; color: #b71c1c; font-size: 14px;">
+
+                            $<?php echo number_format($v['total'], 2); ?>
+
+                        </td>
+
+                        <td style="text-align: center;">
+
+                            <div class="acciones-wrapper">
+
+                                <button type="button" class="btn-ticket" onclick="generarTicketPopup('<?php echo $v['id_venta']; ?>', '<?php echo $v['id_pedido']; ?>', '<?php echo $v['fecha_hora_cobro']; ?>', '<?php echo htmlspecialchars($v['cobrado_por']); ?>', '<?php echo $v['total']; ?>', '<?php echo rawurlencode($v['productos_vendidos']); ?>', '<?php echo $v['estado']; ?>')">
+
+                                    Ticket 🖨️
+
+                                </button>
+
+                                
+
+                                <form action="historial_ventasA.php" method="POST" onsubmit="return confirm('¿Estás completamente seguro de borrar el registro físico de la venta #<?php echo $v['id_venta']; ?>?\nEsta acción no se puede revertir.');" style="margin:0;">
+
+                                    <input type="hidden" name="id_venta_id" value="<?php echo $v['id_venta']; ?>">
+
+                                    <button type="submit" name="eliminar_registro" class="btn-borrar">Borrar</button>
+
+                                </form>
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
+                <?php endwhile; ?>
+
+            <?php else: ?>
+
                 <tr>
-                    <th style="text-align: center; width: 80px;">ID Venta</th>
-                    <th style="text-align: center; width: 80px;">ID Pedido</th>
-                    <th style="text-align: left; width: 160px;">Fecha y Hora</th>
-                    <th style="text-align: left; width: 130px;">Cobrado Por</th>
-                    <th style="text-align: left;">Productos Vendidos</th>
-                    <th style="text-align: right; width: 100px;">Total</th>
-                    <th style="text-align: center; width: 120px;">Acciones</th>
+
+                    <td colspan="8" style="text-align: center; font-style: italic; padding: 25px; color: #777;">No existen registros de ventas o cancelaciones en el historial.</td>
+
                 </tr>
-            </thead>
-            <tbody>
-                <?php if ($resultado && $resultado->num_rows > 0): ?>
-                    <?php while ($venta = $resultado->fetch_assoc()): ?>
-                        <tr>
-                            <td style="text-align: center;">#<?php echo $venta['id_venta']; ?></td>
-                            <td style="text-align: center;">#<?php echo $venta['id_pedido']; ?></td>
-                            <td><?php echo $venta['fecha_hora_cobro']; ?></td>
-                            <td><strong><?php echo htmlspecialchars($venta['cobrado_por']); ?></strong></td>
-                            <td style="line-height: 1.4;"><?php echo $venta['productos_desglosados']; ?></td>
-                            <td style="text-align: right; font-weight: bold; color: #b71c1c;">$<?php echo number_format($venta['total'], 2); ?></td>
-                            <td style="text-align: center;">
-                                <div class="acciones-box">
-                                    <button type="button" class="btn-ticket" onclick="abrirTicketPopUp('<?php echo $venta['id_venta']; ?>', '<?php echo $venta['id_pedido']; ?>', '<?php echo $venta['fecha_hora_cobro']; ?>', '<?php echo htmlspecialchars($venta['cobrado_por']); ?>', '<?php echo $venta['total']; ?>', '<?php echo rawurlencode($venta['ticket_data']); ?>')">
-                                        Ticket
-                                    </button>
-                                    
-                                    <form action="historial_ventasA.php" method="POST" onsubmit="return confirm('¿Está seguro de eliminar permanentemente la venta #<?php echo $venta['id_venta']; ?> del historial? Esta acción no se puede deshacer.');" style="margin:0;">
-                                        <input type="hidden" name="id_venta_borrar" value="<?php echo $venta['id_venta']; ?>">
-                                        <button type="submit" name="borrar_venta" class="btn-borrar">Borrar</button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endwhile; ?>
-                <?php else: ?>
+
+            <?php endif; ?>
+
+        </tbody>
+
+    </table>
+
+
+
+    <a href="panel_admin.php" class="btn-regresar">← Volver al Panel Admin</a>
+
+</div>
+
+
+
+<script>
+
+function generarTicketPopup(idVenta, idPedido, fecha, atendio, totalStr, rawData, estado) {
+
+    let total = parseFloat(totalStr);
+
+    let subtotal = total / 1.16;
+
+    let iva = total - subtotal;
+
+    
+
+    let propina10 = total * 0.10;
+
+    let propina15 = total * 0.15;
+
+
+
+    // Convertir saltos de línea de la BD en estructura HTML para el ticket plano
+
+    let textoProductos = decodeURIComponent(rawData);
+
+    let renglones = textoProductos.split('\n');
+
+    let tablaProductosHtml = '';
+
+
+
+    renglones.forEach(function(linea) {
+
+        if (linea.trim() !== '') {
+
+            tablaProductosHtml += `
+
+                <tr>
+
+                    <td style="padding: 4px 0; font-size: 13px;">${linea}</td>
+
+                    <td style="text-align: right; font-size: 12px; color:#444;">Incluido</td>
+
+                </tr>
+
+            `;
+
+        }
+
+    });
+
+
+
+    // Centrado físico y dimensiones estilo comanda (80mm o similar estándar)
+
+    let ancho = 400; let alto = 660;
+
+    let x = (screen.width - ancho) / 2;
+
+    let y = (screen.height - alto) / 2;
+
+    let configuracion = `width=${ancho},height=${alto},top=${y},left=${x},toolbar=no,menubar=no,scrollbars=yes`;
+
+    
+
+    let ticketWin = window.open('', '_blank', configuracion);
+
+
+
+    let estructuraTicket = `
+
+        <!DOCTYPE html>
+
+        <html>
+
+        <head>
+
+            <meta charset="UTF-8">
+
+            <title>Ticket_Venta_${idVenta}</title>
+
+            <style>
+
+                body { font-family: 'Courier New', Courier, monospace; font-size: 13px; margin: 15px; color: #000; background-color: #fff; }
+
+                .center { text-align: center; }
+
+                .titulo-negocio { font-size: 18px; font-weight: bold; text-transform: uppercase; }
+
+                .linea-puntos { border-top: 1px dashed #000; margin: 8px 0; }
+
+                .status-alerta { border: 2px solid #000; padding: 5px; display: inline-block; font-weight: bold; margin: 8px 0; font-size: 12px; }
+
+                table { width: 100%; border-collapse: collapse; }
+
+                .totales-tabla td { padding: 3px 0; }
+
+                .box-sugerencias { font-size: 11px; background:#f5f5f5; padding: 5px; border:1px dotted #000; margin-top: 12px; line-height: 1.4; }
+
+                .btn-impresion { display: block; width: 100%; background: #000; color: #fff; border: none; padding: 10px; margin-top: 20px; font-weight: bold; cursor: pointer; font-family: inherit; text-transform: uppercase; font-size: 12px; }
+
+                @media print { .btn-impresion { display: none; } }
+
+            </style>
+
+        </head>
+
+        <body>
+
+            <div class="center">
+
+                <div class="titulo-negocio">TAQUERÍA NOVILLERO</div>
+
+                <div>¡Los mejores tacos al carbón!</div>
+
+                <div class="linea-puntos"></div>
+
+                <div><strong>COMPROBANTE ORIGINAL</strong></div>
+
+                <div class="status-alerta">${(estado === 'CANCELADO') ? '❌ VENTA CANCELADA / SIN COBRO' : '✔ CUENTA COBRADA / PAGADA'}</div>
+
+                <div style="margin-top: 4px;">Folio Venta: #${idVenta} | Pedido Ref: #${idPedido}</div>
+
+                <div>Fecha de Mov.: ${fecha}</div>
+
+                <div>Atendido por: ${atendio}</div>
+
+            </div>
+
+
+
+            <div class="linea-puntos"></div>
+
+
+
+            <table>
+
+                <thead>
+
                     <tr>
-                        <td colspan="7" style="text-align: center; font-style: italic; padding: 20px;">No hay registros de ventas guardados.</td>
+
+                        <th style="text-align: left; border-bottom: 1px solid #000; font-size: 12px;">Cant. y Platillo</th>
+
+                        <th style="text-align: right; border-bottom: 1px solid #000; font-size: 12px; width: 80px;">Precio</th>
+
                     </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
 
-        <a href="panel_admin.php" class="btn-volver">← Volver al Panel Admin</a>
-    </div>
+                </thead>
 
-    <script>
-    function abrirTicketPopUp(idVenta, idPedido, fecha, atendio, totalStr, rawData) {
-        let total = parseFloat(totalStr);
-        let subtotal = total / 1.16;
-        let iva = total - subtotal;
-        
-        let propina10 = total * 0.10;
-        let propina15 = total * 0.15;
+                <tbody>
 
-        // Procesar los productos desglosados
-        let dataDecodificada = decodeURIComponent(rawData);
-        let items = dataDecodificada.split('###');
-        let filasProductosHtml = '';
+                    ${tablaProductosHtml}
 
-        items.forEach(function(item) {
-            let partes = item.split('|||');
-            if (partes.length === 3) {
-                let cant = partes[0];
-                let nombre = partes[1];
-                let precioUnitario = parseFloat(partes[2]);
-                let importe = cant * precioUnitario;
-                
-                filasProductosHtml += `
-                    <tr>
-                        <td>${cant} x ${nombre}</td>
-                        <td style="text-align: right;">$${importe.toFixed(2)}</td>
-                    </tr>
-                `;
-            }
-        });
+                </tbody>
 
-        // Configuración de la ventana pop-up (350px de ancho simulando ticketera térmica)
-        let ancho = 380;
-        let alto = 600;
-        let izquierda = (screen.width - ancho) / 2;
-        let arriba = (screen.height - alto) / 2;
-        
-        let opciones = `width=${ancho},height=${alto},top=${arriba},left=${izquierda},toolbar=no,location=no,status=no,menubar=no,scrollbars=yes`;
-        let ventanaTicket = window.open('', '_blank', opciones);
+            </table>
 
-        // Contenido HTML y Estilos rústicos del Ticket de la Taquería
-        let contenidoTicket = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Ticket Venta #${idVenta}</title>
-                <style>
-                    body {
-                        font-family: 'Courier New', Courier, monospace;
-                        font-size: 13px;
-                        color: #000;
-                        margin: 10px;
-                        padding: 0;
-                        background-color: #fff;
-                    }
-                    .text-center { text-align: center; }
-                    .titulo { font-size: 16px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-                    .separador { border-top: 1px dashed #000; margin: 10px 0; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th { border-bottom: 1px solid #000; text-align: left; }
-                    .totales-table td { padding: 2px 0; }
-                    .propina-box { font-size: 11px; font-style: italic; background-color: #f9f9f9; padding: 5px; border: 1px dotted #000; }
-                    .btn-print {
-                        display: block; width: 100%; max-width: 150px; margin: 20px auto; padding: 8px;
-                        background-color: #000; color: #fff; border: none; text-align: center;
-                        font-weight: bold; cursor: pointer; font-family: inherit;
-                    }
-                    @media print {
-                        .btn-print { display: none; }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="text-center">
-                    <div class="titulo">TAQUERÍA NOVILLERO</div>
-                    <div>¡Los mejores tacos al carbón!</div>
-                    <div>Venta: #${idVenta} | Pedido: #${idPedido}</div>
-                    <div>Fecha: ${fecha}</div>
-                    <div>Atendió: ${atendio}</div>
-                </div>
 
-                <div class="separador"></div>
 
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Descripción</th>
-                            <th style="text-align: right; width: 80px;">Importe</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${filasProductosHtml}
-                    </tbody>
-                </table>
+            <div class="linea-puntos"></div>
 
-                <div class="separador"></div>
 
-                <table class="totales-table">
-                    <tr>
-                        <td>Subtotal (Sin IVA):</td>
-                        <td style="text-align: right;">$${subtotal.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                        <td>IVA (16% Incluido):</td>
-                        <td style="text-align: right;">$${iva.toFixed(2)}</td>
-                    </tr>
-                    <tr style="font-weight: bold; font-size: 14px;">
-                        <td>TOTAL NETO:</td>
-                        <td style="text-align: right;">$${total.toFixed(2)}</td>
-                    </tr>
-                </table>
 
-                <div class="separador"></div>
+            <table class="totales-tabla">
 
-                <div class="propina-box">
-                    <div style="font-weight: bold; margin-bottom: 4px; text-align: center;">Sugerencia de Propinas:</div>
-                    <div>• 10% Recomendado: $${propina10.toFixed(2)} (Total: $${(total + propina10).toFixed(2)})</div>
-                    <div>• 15% Excelente servicio: $${propina15.toFixed(2)} (Total: $${(total + propina15).toFixed(2)})</div>
-                </div>
+                <tr><td>Subtotal:</td><td style="text-align: right;">$${subtotal.toFixed(2)}</td></tr>
 
-                <div class="text-center" style="margin-top: 20px; font-weight: bold;">
-                    ¡Gracias por su preferencia!
-                </div>
+                <tr><td>IVA (16% Incluido):</td><td style="text-align: right;">$${iva.toFixed(2)}</td></tr>
 
-                <button class="btn-print" onclick="window.print()">Imprimir Ticket</button>
-            </body>
-            </html>
-        `;
+                <tr style="font-weight: bold; font-size: 14px;"><td>TOTAL COBRADO:</td><td style="text-align: right;">$${total.toFixed(2)}</td></tr>
 
-        ventanaTicket.document.write(contenidoTicket);
-        ventanaTicket.document.close();
-    }
-    </script>
+            </table>
+
+
+
+            <div class="linea-puntos"></div>
+
+
+
+            <div class="box-sugerencias">
+
+                <div style="font-weight:bold; text-align:center; margin-bottom: 2px;">Propina Sugerida voluntaria:</div>
+
+                • Sugerido (10%): $${propina10.toFixed(2)} | Total estimado: $${(total + propina10).toFixed(2)}<br>
+
+                • Excelente (15%): $${propina15.toFixed(2)} | Total estimado: $${(total + propina15).toFixed(2)}
+
+            </div>
+
+
+
+            <p class="center" style="font-weight: bold; margin-top: 15px; font-size: 12px;">
+
+                ¡Muchas gracias por su preferencia!<br>Vuelva pronto.
+
+            </p>
+
+
+
+            <button class="btn-impresion" onclick="window.print()">Imprimir Comanda</button>
+
+        </body>
+
+        </html>
+
+    `;
+
+
+
+    ticketWin.document.write(estructuraTicket);
+
+    ticketWin.document.close();
+
+}
+
+</script>
+
+
 
 </body>
+
 </html>
+
 <?php $conexion->close(); ?>
